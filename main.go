@@ -51,6 +51,7 @@ func main() {
 	memLines := flag.Int("history", 200000, "normalized log lines kept in RAM per container (disk cache keeps all)")
 	cacheDir := flag.String("cache", defaultCacheDir(), "directory for the normalized JSONL log cache")
 	dockerHost := flag.String("docker", "", "also stream logs from a Docker daemon, e.g. unix:///var/run/docker.sock or tcp://host:2375 (empty = disabled)")
+	clearCacheOnStop := flag.Bool("clear-cache-on-stop", true, "delete the on-disk JSONL cache on shutdown (no history persists across runs)")
 	flag.Parse()
 
 	// Durable, Dozzle-contract-shaped store: RAM for fast query + JSONL cache on
@@ -111,6 +112,10 @@ func main() {
 	log.Println("shutting down...")
 	close(stop)
 	_ = httpSrv.Close()
+	if *clearCacheOnStop {
+		st.ClearAll()
+		log.Printf("cleared log cache in %s", *cacheDir)
+	}
 }
 
 // uiHandler serves Dozzle's built SPA from dir. Real asset files are served

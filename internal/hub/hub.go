@@ -128,6 +128,34 @@ func (h *Hub) EnsureDockerContainer(id, name, image string) {
 	h.notifyChangeLocked(changed)
 }
 
+// RemoveContainer drops a container when its source goes away (file deleted or
+// Docker container stopped): it unlists it from the UI (via a fresh
+// containers-changed snapshot) and deletes its history/cache so nothing stale
+// remains. A file source passes the file path; an explicit source passes the id.
+func (h *Hub) RemoveContainer(id string) {
+	if id == "" {
+		return
+	}
+	h.mu.Lock()
+	_, existed := h.containers[id]
+	if existed {
+		delete(h.containers, id)
+	}
+	h.notifyChangeLocked(existed) // unlocks; re-sends snapshot if changed
+	if existed {
+		h.history.DropCache(id)
+	}
+}
+
+// RemoveContainerForFile is the file-source convenience: it maps a file path to
+// its synthetic container id and removes it.
+func (h *Hub) RemoveContainerForFile(file string) {
+	if file == "" {
+		return
+	}
+	h.RemoveContainer(model.ContainerIDForFile(file))
+}
+
 // EnsureContainer registers a file as a container without any log line, so the
 // UI lists it as soon as the source discovers the file (even if the file is
 // idle). If this adds a new container, every change subscriber gets a fresh

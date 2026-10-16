@@ -154,6 +154,29 @@ func (d *Docker) scan(stop <-chan struct{}) {
 	}
 }
 
+// isRunning reports whether the daemon still considers a container running.
+// Used after a log stream ends to tell "stopped" from a transient disconnect.
+func (d *Docker) isRunning(id string) bool {
+	req, _ := http.NewRequest(http.MethodGet, d.baseURL+"/containers/"+id+"/json", nil)
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false // 404 = removed
+	}
+	var out struct {
+		State struct {
+			Running bool `json:"Running"`
+		} `json:"State"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return false
+	}
+	return out.State.Running
+}
+
 // list calls GET /containers/json (running only).
 func (d *Docker) list() ([]dockerContainer, error) {
 	req, _ := http.NewRequest(http.MethodGet, d.baseURL+"/containers/json", nil)
@@ -173,13 +196,26 @@ func (d *Docker) list() ([]dockerContainer, error) {
 }
 
 // follow streams one container's logs and publishes each line to the hub. It
-// uses follow=1 so the request stays open; when it ends (container stopped) the
-// follower exits and scan() will restart one if the container comes back.
+// uses follow=1 so the request stays open; when the stream ends, the follower
+// checks whether the container is still running — if it has stopped, the
+// container is unlisted and its cache dropped; otherwise scan() will restart a
+// follower (the stream just dropped transiently).
 func (d *Docker) follow(id, name, image string, stop <-chan struct{}) {
 	defer func() {
 		d.mu.Lock()
 		delete(d.tailing, id)
 		d.mu.Unlock()
+		// Only remove from the UI if the daemon says it's gone, and not during
+		// a global shutdown (stop closed) where ClearAll handles cache.
+		select {
+		case <-stop:
+			return
+		default:
+		}
+		if !d.isRunning(id) {
+			d.logf("docker: %s stopped — unlisting", shortID(id))
+			d.Hub.RemoveContainer(id)
+		}
 	}()
 
 	q := url.Values{}

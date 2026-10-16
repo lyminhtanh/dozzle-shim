@@ -37,7 +37,20 @@ Flags:
 | `-docker` | *(off)* | also stream a Docker daemon's logs, e.g. `unix:///var/run/docker.sock` or `tcp://host:2375` |
 | `-cache` | `~/.dozzle-shim` | directory for the normalized JSONL history cache |
 | `-history` | `200000` | log lines kept in RAM per container (disk cache keeps all) |
+| `-clear-cache-on-stop` | `true` | delete the on-disk JSONL cache on shutdown (no history persists across runs); set `false` to keep history |
 | `-ui` | *(embedded)* | dev only: override the embedded UI with a Dozzle `dist` on disk |
+
+### Adding / removing tracked logs
+
+- **Add a file**: drop it into `-logs` (or `touch tmp/logs/foo.log`, or symlink an
+  external file in). The follower rescans every 500ms and lists it as a new
+  container automatically — no restart.
+- **Remove a file**: delete it. Within ~0.5s the shim unlists its container and
+  deletes its history cache, so it disappears from the UI.
+- **Docker**: containers are listed while running and unlisted (cache dropped)
+  when they stop; new containers appear on the next poll.
+- **On stop**: by default the shim clears all cache on shutdown, so each run
+  starts clean. Pass `-clear-cache-on-stop=false` to keep history across runs.
 
 ## Run without Go (prebuilt binaries)
 
@@ -130,8 +143,11 @@ features need Docker and have no meaning for file logs.
   wall-clock.
 - **Level is heuristic.** The source carries no log level, so the shim sniffs
   the line (`error`/`warn`/`info`/...); everything is `stdout`.
-- **Container lifecycle is static.** Files are always "running"; no
-  start/stop/die events, and no CPU/memory/network stats.
+- **Limited lifecycle.** A tracked file/container shows as "running"; there are
+  no CPU/memory/network stats. Appearance (new file / started container) and
+  disappearance (deleted file / stopped container, which also drops the cache)
+  are handled, but there are no intermediate start/stop/die events or restart
+  counts.
 - **Docker support is logs-only.** With `-docker` the shim lists and streams
   containers, but offers no stats, start/stop/restart, exec, or image inspect —
   use Dozzle itself for those. Docker containers' timestamps are also stamped at

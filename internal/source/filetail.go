@@ -228,8 +228,10 @@ func (f *FileTail) follow(path string, stop <-chan struct{}) {
 
 		info, err := os.Stat(path)
 		if err != nil {
-			// File vanished (rotated away/deleted). Drop the follower; scan()
-			// will restart one if a new file with this name reappears.
+			// File vanished (rotated away/deleted). Drop the follower AND unlist
+			// the container + delete its cache, so a deleted file disappears
+			// from the UI. scan() restarts a follower if the name reappears.
+			f.Hub.RemoveContainerForFile(path)
 			return
 		}
 

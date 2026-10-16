@@ -214,6 +214,51 @@ func (s *Store) Count(containerID string) int {
 	return len(s.events[containerID])
 }
 
+// DropCache forgets a container entirely: it drops its in-RAM events, closes its
+// cache writer, and deletes the JSONL cache file. Used when a source goes away
+// (file deleted / Docker container stopped) so stale history doesn't linger.
+func (s *Store) DropCache(containerID string) {
+	if containerID == "" {
+		return
+	}
+	s.mu.Lock()
+	delete(s.events, containerID)
+	if w, ok := s.writers[containerID]; ok {
+		w.bw.Flush()
+		w.f.Close()
+		delete(s.writers, containerID)
+	}
+	s.mu.Unlock()
+	_ = os.Remove(s.cachePath(containerID))
+}
+
+// ClearAll closes every cache writer and deletes every JSONL cache file in the
+// store directory, leaving no history on disk. Used on shutdown when the shim
+// is configured not to persist history across runs.
+func (s *Store) ClearAll() {
+	s.mu.Lock()
+	for id, w := range s.writers {
+		w.bw.Flush()
+		w.f.Close()
+		delete(s.writers, id)
+	}
+	s.events = map[string][]model.DozzleLogEvent{}
+	dir := s.dir
+	s.mu.Unlock()
+
+	// Remove every *.jsonl cache file (covers containers whose writer was never
+	// open this run, e.g. loaded-from-cache then idle).
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".jsonl" {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
 // Close flushes and closes all cache writers.
 func (s *Store) Close() {
 	s.mu.Lock()
