@@ -1,0 +1,15 @@
+# Go build output
+/dozzle-shim
+*.exe
+*.test
+*.out
+
+# Local Dozzle build we serve (not part of this repo)
+/dozzle-dist/
+/dist/
+
+# Editor / OS
+.DS_Store
+
+# IDE
+.idea/

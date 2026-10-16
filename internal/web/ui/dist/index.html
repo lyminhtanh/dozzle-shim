@@ -1,0 +1,40 @@
+<!doctype html>
+<html class="bg-base-200 text-base-content">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- No apple-mobile-web-app-status-bar-style. "black-translucent" put page pixels under the
+         iOS status bar, and since iOS 26 the system fills that inset with a Liquid Glass blur that
+         ramps ~40pt down into the page, smearing the logo and the nav icons. There is no way to
+         opt out of the effect, so the only fix is to stop drawing up there: without the meta the
+         web view starts below the status bar and env(safe-area-inset-top) reports 0. iOS has also
+         warned since 11 that the value is going away. -->
+    <!-- With an opaque status bar this paints it, so it must not be empty before App.vue runs.
+         #121212 is the dark theme, matching the manifest's theme_color for the same reason. -->
+    <meta name="theme-color" content="#121212" />
+    <title>Dozzle</title>
+    <script type="application/json" id="config__json">
+      {{ marshal .Config }}
+    </script>
+    <link rel="icon" href="{{ .Base }}/favicon.png" type="image/png" sizes="192x192" />
+    {{- if .Dev}}
+    <script type="module" src="{{ .Vite }}/@vite/client"></script>
+    <script type="module" src="{{ .Vite }}/assets/main.ts"></script>
+    {{- else }} {{- range .Styles }}
+    <link rel="stylesheet" href="{{ $.Base }}/{{ . }}" />
+    {{- end }} {{- range .Preload }}
+    <link rel="modulepreload" href="{{ $.Base }}/{{ . }}" />
+    {{- end }}
+    <script type="module" src="{{ .Base }}/{{ .Entry }}"></script>
+    {{- end }}
+    <meta name="description" content="A log viewer for containers" />
+    <meta name="robots" content="noindex" />
+    <link rel="apple-touch-icon" href="{{ .Base }}/apple-touch-icon.png" sizes="512x512" />
+    <link rel="manifest" href="{{ .Base }}/manifest.webmanifest" />
+  </head>
+
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
