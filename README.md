@@ -83,6 +83,8 @@ Flags:
 | `-glob` | `*.log` | file-name pattern within `-logs` |
 | `-listen` | `:8080` | address to serve the UI and `/api` on |
 | `-docker` | *(off)* | also stream a Docker daemon's logs, e.g. `unix:///var/run/docker.sock` or `tcp://host:2375` |
+| `-exec` | *(off)* | run a command and stream its stdout+stderr into the UI (repeatable), e.g. `-exec "java -jar app.jar"` |
+| `-name` | *(derived)* | label for the matching `-exec` (repeatable, positional with `-exec`) |
 | `-cache` | `~/.dozzle-shim` | directory for the normalized JSONL history cache |
 | `-history` | `200000` | log lines kept in RAM per container (disk cache keeps all) |
 | `-clear-cache-on-stop` | `true` | delete the on-disk JSONL cache on shutdown (no history persists across runs); set `false` to keep history |
@@ -143,12 +145,46 @@ does **only** list + stream — no stats, container actions, exec, or inspect
 (use Dozzle itself if you need those). If the daemon is unreachable the Docker
 source is skipped and file logs still work.
 
+## Process logs (`-exec`)
+
+A host process that only logs to the console — a Spring Boot app, a dev server,
+anything you'd normally run in a terminal — is neither a file nor a Docker
+container, so it falls between the other two sources. `-exec` closes that gap:
+the shim **runs the process for you** and streams its output into the UI, with
+no file and no Docker.
+
+```bash
+dozzle-shim -exec "java -jar app.jar" -name api
+# multiple processes, one UI (each is its own container):
+dozzle-shim \
+  -exec "java -jar app.jar"       -name api \
+  -exec "npm --prefix web run dev" -name web
+```
+
+How it behaves:
+
+- The command runs **through your shell** (`$SHELL -c` on Unix, `cmd /c` on
+  Windows), so quotes, pipes, globs and env vars work as written.
+- **Both stdout and stderr are captured** and tagged — important because many
+  apps (Spring Boot included) log to stderr; a stdout-only capture would
+  silently drop lines.
+- The process appears as a container immediately and is **unlisted when it
+  exits**. Stopping the shim terminates the whole process group, so a shell that
+  launched the real app (e.g. `java`) doesn't leave an orphan behind.
+- `-exec` / `-name` are positional: the *n*-th `-name` labels the *n*-th
+  `-exec`. Without a name, the label is derived from the command.
+
+> Already-running processes can't be attached this way — their stdout is already
+> wired to whatever launched them. Either start the process under `-exec`, or
+> pipe/redirect its output to a file the shim watches with `-logs`/`-glob`.
+
 ## How it works
 
 | Side | Transport | Shape |
 |------|-----------|-------|
 | File source | `tail -F` a directory | one line → one normalized event, keyed by file path |
 | Docker source *(optional)* | Engine API `GET /containers/json` + `/logs?follow=1` | one line → one normalized event, keyed by container id |
+| Process source *(optional)* | run a command, read its stdout+stderr pipes | one line → one normalized event, keyed by a stable exec id |
 | Dozzle UI (sink) | HTTP + SSE `/api/*` | compact `LogEvent{t,m,ts,id,l,s,c,rm}` + `containers-changed` |
 
 Both sources publish into the same hub, so a log line is treated identically no
@@ -215,6 +251,8 @@ internal/store/             durable normalized history: RAM + JSONL disk cache; 
 internal/hub/               fan-out: lines -> SSE subscribers; file->container tracking; store
 internal/source/filetail.go local file follower (tail -F) + cache load + boot-import
 internal/source/docker.go   optional Docker source: Engine API list + log stream (no SDK)
+internal/source/exec.go     optional process source: run a command, stream stdout+stderr
+internal/source/shell_*.go  per-OS shell invocation + process-group kill
 internal/web/               SSE helpers, impersonated /api handlers (bootstrap, stream+search,
                             backfill, histogram), smart-case regex filter + <mark> highlight,
                             index.html template renderer, brotli-aware static assets (tested)

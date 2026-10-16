@@ -11,6 +11,7 @@
 //	  -glob '*.log' \                          # file-name pattern within -logs
 //	  -listen :8080 \                          # where this shim serves the UI + /api
 //	  -docker unix:///var/run/docker.sock \    # optional: also stream Docker logs
+//	  -exec "java -jar app.jar" -name api \    # optional: run a process, stream its stdout+stderr
 //	  -ui ./dozzle-dist                        # dev only: Dozzle vite build on disk
 package main
 
@@ -22,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/lyminhtanh/dozzle-shim/internal/hub"
@@ -43,6 +45,15 @@ func defaultCacheDir() string {
 // build.sh sets it from `git describe`.
 var version = "0.1.0-shim"
 
+// stringSlice collects a repeatable string flag (e.g. -exec used multiple times).
+type stringSlice []string
+
+func (s *stringSlice) String() string { return strings.Join(*s, ", ") }
+func (s *stringSlice) Set(v string) error {
+	*s = append(*s, v)
+	return nil
+}
+
 func main() {
 	logsDir := flag.String("logs", "./logs", "directory of log files to follow")
 	glob := flag.String("glob", "*.log", "file-name pattern to match within -logs")
@@ -52,6 +63,10 @@ func main() {
 	cacheDir := flag.String("cache", defaultCacheDir(), "directory for the normalized JSONL log cache")
 	dockerHost := flag.String("docker", "", "also stream logs from a Docker daemon, e.g. unix:///var/run/docker.sock or tcp://host:2375 (empty = disabled)")
 	clearCacheOnStop := flag.Bool("clear-cache-on-stop", true, "delete the on-disk JSONL cache on shutdown (no history persists across runs)")
+	var execCmds stringSlice
+	flag.Var(&execCmds, "exec", "run a command and stream its stdout+stderr into the UI (repeatable), e.g. -exec 'java -jar app.jar'")
+	var execNames stringSlice
+	flag.Var(&execNames, "name", "label for the matching -exec (repeatable, positional with -exec; defaults to the program name)")
 	flag.Parse()
 
 	// Durable, Dozzle-contract-shaped store: RAM for fast query + JSONL cache on
@@ -83,6 +98,19 @@ func main() {
 	if *dockerHost != "" {
 		dsrc := &source.Docker{Host: *dockerHost, Hub: h, Log: log.Printf}
 		go dsrc.Run(stop)
+	}
+
+	// Optional process sources: each -exec runs a command and streams its
+	// stdout+stderr into the same hub. The matching -name (by position) labels
+	// it. This is the out-of-the-box path for a host process that only logs to
+	// the console (no file, no Docker).
+	for i, cmd := range execCmds {
+		name := ""
+		if i < len(execNames) {
+			name = execNames[i]
+		}
+		esrc := &source.Exec{Command: cmd, Name: name, Hub: h, Log: log.Printf}
+		go esrc.Run(stop)
 	}
 
 	// Sink: Dozzle UI + impersonated /api, served from the hub.
