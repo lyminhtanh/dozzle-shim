@@ -13,3 +13,6 @@
 
 # IDE
 .idea/
+
+# Kiro local settings (machine-specific MCP config, absolute paths)
+.kiro/
