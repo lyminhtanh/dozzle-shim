@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Primary SEO -->
+  <title>dozzle-shim — view local log files in a web UI (Dozzle for non-Docker logs)</title>
+  <meta name="description" content="dozzle-shim is a single self-contained binary that runs Dozzle's web UI against your local, non-Docker log files. Live tail, full-history search, highlighting, and a histogram for plain *.log files — optionally plus Docker container logs. No clone, no Go required." />
+  <link rel="canonical" href="https://lyminhtanh.github.io/dozzle-shim/" />
+  <meta name="keywords" content="log viewer, web log viewer, tail log files browser, Dozzle non-Docker, local log viewer, self-hosted log viewer, view log files in browser, Go log viewer, log tail web UI, Docker log viewer" />
+  <meta name="author" content="lyminhtanh" />
+  <meta name="robots" content="index, follow" />
+  <!-- Google Search Console verification (replace content when you verify ownership):
+  <meta name="google-site-verification" content="YOUR_TOKEN" /> -->
+
+  <!-- Open Graph (link previews on social / chat / Slack / Discord) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="dozzle-shim" />
+  <meta property="og:title" content="dozzle-shim — Dozzle's web UI for your local, non-Docker log files" />
+  <meta property="og:description" content="A single self-contained binary that shows plain *.log files (and optionally Docker containers) in the real Dozzle UI: live tail, full-history search, highlighting, histogram." />
+  <meta property="og:url" content="https://lyminhtanh.github.io/dozzle-shim/" />
+  <meta property="og:image" content="https://lyminhtanh.github.io/dozzle-shim/og.svg" />
+
+  <!-- Twitter card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="dozzle-shim — Dozzle's web UI for local, non-Docker log files" />
+  <meta name="twitter:description" content="Live tail, full-history search, highlighting and a histogram for plain log files, in the unmodified Dozzle UI. One binary, no Go or Docker required." />
+  <meta name="twitter:image" content="https://lyminhtanh.github.io/dozzle-shim/og.svg" />
+
+  <!-- Structured data: helps Google + AI answer engines understand the project -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "dozzle-shim",
+    "description": "A single self-contained binary that runs Dozzle's web UI against local, non-Docker log files, with live tail, full-history search, match highlighting and a histogram. Can also stream Docker container logs.",
+    "codeRepository": "https://github.com/lyminhtanh/dozzle-shim",
+    "programmingLanguage": "Go",
+    "runtimePlatform": "Linux, macOS, Windows",
+    "license": "https://opensource.org/licenses/MIT",
+    "author": { "@type": "Person", "name": "lyminhtanh" },
+    "keywords": "log viewer, Dozzle, non-Docker logs, tail, self-hosted, Go, web UI"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is dozzle-shim?",
+        "acceptedAnswer": { "@type": "Answer", "text": "dozzle-shim is a small Go program that serves Dozzle's unmodified web UI and feeds it by tailing your local log files. It lets you view plain *.log files in a modern browser UI with live tail, full-history search, highlighting and a histogram — without Docker." }
+      },
+      {
+        "@type": "Question",
+        "name": "How is dozzle-shim different from Dozzle?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Dozzle reads logs from the Docker API. dozzle-shim reads plain files on disk and impersonates the slice of Dozzle's API its UI needs, so you get the same UI for services that log to files during local development. It can optionally also stream Docker container logs alongside the files." }
+      },
+      {
+        "@type": "Question",
+        "name": "Does dozzle-shim need Docker or Go to run?",
+        "acceptedAnswer": { "@type": "Answer", "text": "No. Prebuilt binaries for macOS, Linux and Windows are self-contained (the UI is embedded), so you need neither Go nor Docker. A Docker image is also available if you prefer docker run." }
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    :root { --bg:#0b0e14; --panel:#131722; --fg:#e6e8ee; --muted:#9aa4b2; --accent:#f6c915; --accent2:#ffd84d; --border:#232838; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); line-height:1.6; }
+    a { color:var(--accent2); }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+    header { padding: 72px 0 48px; text-align:center; }
+    .logo { font-size: 40px; font-weight: 800; letter-spacing:-.5px; }
+    .logo .dot { color: var(--accent); }
+    .tag { color: var(--muted); font-size: 20px; max-width: 640px; margin: 14px auto 0; }
+    .cta { margin-top: 28px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+    .btn { display:inline-block; padding:11px 20px; border-radius:8px; text-decoration:none; font-weight:600; border:1px solid var(--border); color:var(--fg); background:var(--panel); }
+    .btn.primary { background:var(--accent); color:#1a1300; border-color:var(--accent); }
+    section { padding: 28px 0; border-top:1px solid var(--border); }
+    h2 { font-size: 24px; margin: 0 0 14px; }
+    h3 { font-size: 17px; margin: 22px 0 8px; }
+    pre { background:#0a0d13; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:13.5px; }
+    code { font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    ul.feat { list-style:none; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; }
+    ul.feat li::before { content:"▸ "; color:var(--accent); }
+    .muted { color:var(--muted); }
+    details { border:1px solid var(--border); border-radius:8px; padding:10px 14px; margin:10px 0; background:var(--panel); }
+    summary { cursor:pointer; font-weight:600; }
+    footer { padding: 40px 0 64px; text-align:center; color:var(--muted); font-size:14px; }
+    @media (max-width:560px){ ul.feat{grid-template-columns:1fr;} .logo{font-size:32px;} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <header>
+      <div class="logo">dozzle<span class="dot">·</span>shim</div>
+      <p class="tag">Run <strong>Dozzle's web UI</strong> against your <strong>local, non-Docker log files</strong>. One self-contained binary — live tail, full-history search, highlighting and a histogram for plain <code>*.log</code> files.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/lyminhtanh/dozzle-shim">View on GitHub</a>
+        <a class="btn" href="https://github.com/lyminhtanh/dozzle-shim/releases/latest">Download</a>
+      </div>
+    </header>
+
+    <section>
+      <h2>What it is</h2>
+      <p>Dozzle is a great browser UI for Docker container logs. But during local development most services log to <strong>plain files</strong>, not Docker. <strong>dozzle-shim</strong> bridges that gap: it serves Dozzle's <em>unmodified</em> UI and feeds it by tailing your log files directly, so you get the same clean interface — live tail, searchable history, level colouring, a histogram — for any <code>*.log</code> on disk. It can also stream <strong>Docker container logs</strong> alongside your files when you want both in one place.</p>
+    </section>
+
+    <section>
+      <h2>Features</h2>
+      <ul class="feat">
+        <li>Live tail of local log files</li>
+        <li>Full-history search with highlighting</li>
+        <li>Time histogram &amp; level colouring</li>
+        <li>Optional Docker container logs</li>
+        <li>Embedded UI — one static binary</li>
+        <li>No Go, Node or Docker to run</li>
+        <li>macOS, Linux, Windows</li>
+        <li>MIT licensed, open source</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Get started</h2>
+
+      <h3>Option A — prebuilt binary (no Docker, no Go)</h3>
+      <pre><code>curl -fsSL https://raw.githubusercontent.com/lyminhtanh/dozzle-shim/main/install.sh | sh
+dozzle-shim -logs ./logs -glob '*.log' -listen :8080
+# open http://localhost:8080</code></pre>
+
+      <h3>Option B — Docker</h3>
+      <pre><code>docker run --rm -p 8080:8080 \
+  -v "$PWD/logs":/logs:ro \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  --group-add 0 \
+  ghcr.io/lyminhtanh/dozzle-shim -logs /logs -glob '*.log' \
+  -docker unix:///var/run/docker.sock</code></pre>
+      <p class="muted">The <code>-docker</code> / socket mount is optional — drop it for file logs only. See the <a href="https://github.com/lyminhtanh/dozzle-shim#readme">README</a> for all flags.</p>
+    </section>
+
+    <section>
+      <h2>FAQ</h2>
+      <details open>
+        <summary>What is dozzle-shim?</summary>
+        <p>A small Go program that serves Dozzle's unmodified web UI and feeds it by tailing your local log files, so you can view plain <code>*.log</code> files in a modern browser UI with live tail, full-history search, highlighting and a histogram — without Docker.</p>
+      </details>
+      <details>
+        <summary>How is it different from Dozzle?</summary>
+        <p>Dozzle reads logs from the Docker API. dozzle-shim reads plain files on disk and impersonates the slice of Dozzle's API its UI needs, so you get the same UI for services that log to files. It can optionally also stream Docker container logs alongside the files.</p>
+      </details>
+      <details>
+        <summary>Does it need Docker or Go?</summary>
+        <p>No. The prebuilt binaries for macOS, Linux and Windows are self-contained (the UI is embedded), so you need neither Go nor Docker. A Docker image is also available if you prefer <code>docker run</code>.</p>
+      </details>
+    </section>
+
+    <footer>
+      <p>Open source (MIT) · <a href="https://github.com/lyminhtanh/dozzle-shim">github.com/lyminhtanh/dozzle-shim</a></p>
+      <p>Bundles the web UI from <a href="https://github.com/amir20/dozzle">Dozzle</a> (MIT). Not affiliated with the Dozzle project.</p>
+    </footer>
+
+  </div>
+</body>
+</html>

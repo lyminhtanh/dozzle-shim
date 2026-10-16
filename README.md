@@ -17,6 +17,8 @@ to the UI as one synthetic, always-"running" container.
 > plain files for the common case where your services log to files during local
 > development rather than to Docker.
 
+**Website:** https://lyminhtanh.github.io/dozzle-shim/ · **Releases:** [latest](https://github.com/lyminhtanh/dozzle-shim/releases/latest)
+
 ## One-click run (no clone)
 
 You don't need to clone this repo or install Go. Pick one:

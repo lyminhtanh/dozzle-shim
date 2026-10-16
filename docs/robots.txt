@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://lyminhtanh.github.io/dozzle-shim/sitemap.xml
