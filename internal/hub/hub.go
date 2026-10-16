@@ -89,6 +89,45 @@ func (h *Hub) ensureContainerLocked(file string) bool {
 	return true
 }
 
+// ensureExplicitLocked registers a container by explicit id/name/image if
+// unseen, returning whether the set changed. Used by non-file sources (Docker).
+// Caller must hold the write lock.
+func (h *Hub) ensureExplicitLocked(id, name, image string) bool {
+	if _, ok := h.containers[id]; ok {
+		return false
+	}
+	if name == "" {
+		name = id
+	}
+	if image == "" {
+		image = "container"
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	h.containers[id] = model.DozzleContainer{
+		ID:      id,
+		Name:    name,
+		Image:   image,
+		State:   "running",
+		Host:    "localhost",
+		Created: now,
+		Started: now,
+		Labels:  map[string]string{"source": "docker"},
+	}
+	return true
+}
+
+// EnsureDockerContainer registers a Docker container (explicit id/name/image)
+// so the UI lists it even before its first log line. Mirrors EnsureContainer
+// for the file source.
+func (h *Hub) EnsureDockerContainer(id, name, image string) {
+	if id == "" {
+		return
+	}
+	h.mu.Lock()
+	changed := h.ensureExplicitLocked(id, name, image)
+	h.notifyChangeLocked(changed)
+}
+
 // EnsureContainer registers a file as a container without any log line, so the
 // UI lists it as soon as the source discovers the file (even if the file is
 // idle). If this adds a new container, every change subscriber gets a fresh
@@ -99,6 +138,13 @@ func (h *Hub) EnsureContainer(file string) {
 	}
 	h.mu.Lock()
 	changed := h.ensureContainerLocked(file)
+	h.notifyChangeLocked(changed)
+}
+
+// notifyChangeLocked snapshots change subscribers under the lock, releases it,
+// then fans out a fresh container snapshot if changed. Caller must hold the
+// write lock on entry; this unlocks before returning.
+func (h *Hub) notifyChangeLocked(changed bool) {
 	var targets []chan []model.DozzleContainer
 	var snapshot []model.DozzleContainer
 	if changed {
@@ -120,14 +166,19 @@ func (h *Hub) EnsureContainer(file string) {
 }
 
 // Publish takes a parsed log line, maps it to a Dozzle log event, registers its
-// file as a container if new, and fans it out.
+// container (by file path or explicit id) if new, and fans it out.
 func (h *Hub) Publish(m model.LogLine) {
-	if m.Origin == nil || m.Origin.File == "" {
-		return // only file-origin lines map to a container
+	if m.Origin == nil || m.Origin.Key() == "" {
+		return // a line must map to some container (file or explicit id)
 	}
 
 	h.mu.Lock()
-	changed := h.ensureContainerLocked(m.Origin.File)
+	var changed bool
+	if m.Origin.ContainerID != "" {
+		changed = h.ensureExplicitLocked(m.Origin.ContainerID, m.Origin.Name, m.Origin.Image)
+	} else {
+		changed = h.ensureContainerLocked(m.Origin.File)
+	}
 	h.seq++
 	event := model.ToDozzleLogEvent(m, h.seq)
 

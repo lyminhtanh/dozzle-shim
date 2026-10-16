@@ -26,10 +26,10 @@ import (
 // Store holds normalized events per container, backed by JSONL cache files.
 type Store struct {
 	mu      sync.RWMutex
-	dir     string                          // cache dir, e.g. ~/.dozzle-shim
-	maxMem  int                             // soft cap of in-RAM events per container (0 = unlimited)
+	dir     string                            // cache dir, e.g. ~/.dozzle-shim
+	maxMem  int                               // soft cap of in-RAM events per container (0 = unlimited)
 	events  map[string][]model.DozzleLogEvent // containerID -> events (chronological)
-	writers map[string]*cacheWriter         // containerID -> append-only JSONL writer
+	writers map[string]*cacheWriter           // containerID -> append-only JSONL writer
 }
 
 type cacheWriter struct {

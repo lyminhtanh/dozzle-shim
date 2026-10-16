@@ -24,10 +24,39 @@ const (
 	TypeLogSingle = "log_single"
 )
 
-// LogOrigin says where a line came from. `File` is the key field: each distinct
-// file becomes one synthetic Dozzle container.
+// LogOrigin says where a line came from.
+//
+// Two source shapes are supported:
+//
+//   - File source: set File only. Each distinct file becomes one synthetic
+//     Dozzle container, with its id derived from the path (ContainerIDForFile).
+//   - Explicit source (e.g. Docker): set ContainerID (and optionally Name/Image)
+//     to publish against a container the source registered itself. When
+//     ContainerID is non-empty it is used verbatim and File is ignored.
 type LogOrigin struct {
 	File string `json:"file"`
+	// ContainerID, when non-empty, is the container id this line belongs to.
+	// Used by non-file sources that manage their own container identity.
+	ContainerID string `json:"container_id,omitempty"`
+	// Name/Image are optional display metadata for an explicit-id source; the
+	// hub uses them when it first registers the container.
+	Name  string `json:"name,omitempty"`
+	Image string `json:"image,omitempty"`
+}
+
+// Key returns the container id this origin maps to: the explicit ContainerID if
+// set, otherwise the file-derived id. Empty if the origin carries neither.
+func (o *LogOrigin) Key() string {
+	if o == nil {
+		return ""
+	}
+	if o.ContainerID != "" {
+		return o.ContainerID
+	}
+	if o.File != "" {
+		return ContainerIDForFile(o.File)
+	}
+	return ""
 }
 
 // LogLine is one parsed log line handed to the hub.

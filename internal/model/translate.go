@@ -71,10 +71,7 @@ func levelFor(content string, logType int) string {
 // UI expects on the log SSE stream. `seq` is the per-stream monotonic id the UI
 // uses for dedup/ordering; the caller owns the counter.
 func ToDozzleLogEvent(m LogLine, seq uint32) DozzleLogEvent {
-	containerID := ""
-	if m.Origin != nil {
-		containerID = ContainerIDForFile(m.Origin.File)
-	}
+	containerID := m.Origin.Key()
 	return DozzleLogEvent{
 		T:  "single",
 		M:  m.Content,

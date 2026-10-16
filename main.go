@@ -7,17 +7,18 @@
 // Usage:
 //
 //	dozzle-shim \
-//	  -logs ./tmp/logs \                # directory of log files to follow
-//	  -glob '*.log' \                   # file-name pattern within -logs
-//	  -listen :8080 \                   # where this shim serves the UI + /api
-//	  -ui ./dozzle-dist                 # Dozzle's built frontend (vite build output)
+//	  -logs ./tmp/logs \                       # directory of log files to follow
+//	  -glob '*.log' \                          # file-name pattern within -logs
+//	  -listen :8080 \                          # where this shim serves the UI + /api
+//	  -docker unix:///var/run/docker.sock \    # optional: also stream Docker logs
+//	  -ui ./dozzle-dist                        # dev only: Dozzle vite build on disk
 package main
 
 import (
 	"flag"
+	"io/fs"
 	"log"
 	"net/http"
-	"io/fs"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -38,7 +39,9 @@ func defaultCacheDir() string {
 	return "./.dozzle-shim-cache"
 }
 
-const version = "0.1.0-shim"
+// version is overridable at build time via -ldflags "-X main.version=...".
+// build.sh sets it from `git describe`.
+var version = "0.1.0-shim"
 
 func main() {
 	logsDir := flag.String("logs", "./logs", "directory of log files to follow")
@@ -47,6 +50,7 @@ func main() {
 	uiDir := flag.String("ui", "", "override the embedded UI with a Dozzle vite dist on disk (dev only; empty = use the UI built into this binary)")
 	memLines := flag.Int("history", 200000, "normalized log lines kept in RAM per container (disk cache keeps all)")
 	cacheDir := flag.String("cache", defaultCacheDir(), "directory for the normalized JSONL log cache")
+	dockerHost := flag.String("docker", "", "also stream logs from a Docker daemon, e.g. unix:///var/run/docker.sock or tcp://host:2375 (empty = disabled)")
 	flag.Parse()
 
 	// Durable, Dozzle-contract-shaped store: RAM for fast query + JSONL cache on
@@ -71,6 +75,14 @@ func main() {
 	}
 	stop := make(chan struct{})
 	go src.Run(stop)
+
+	// Optional second source: a Docker daemon. Lists containers and streams
+	// their logs into the same hub (same UI/store/search). Disabled unless
+	// -docker is given.
+	if *dockerHost != "" {
+		dsrc := &source.Docker{Host: *dockerHost, Hub: h, Log: log.Printf}
+		go dsrc.Run(stop)
+	}
 
 	// Sink: Dozzle UI + impersonated /api, served from the hub.
 	srv := &web.Server{Hub: h, Version: version}
