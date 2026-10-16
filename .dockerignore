@@ -1,0 +1,10 @@
+# Keep the build context small — the UI dist IS needed (go:embed), so it is NOT
+# excluded here; only local build output and tooling cruft are.
+/dist/
+/dozzle-dist/
+*.exe
+*.test
+*.out
+.git/
+.idea/
+.DS_Store

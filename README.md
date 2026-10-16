@@ -17,7 +17,53 @@ to the UI as one synthetic, always-"running" container.
 > plain files for the common case where your services log to files during local
 > development rather than to Docker.
 
-## Quick start
+## One-click run (no clone)
+
+You don't need to clone this repo or install Go. Pick one:
+
+### Option A — prebuilt binary (no Docker)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lyminhtanh/dozzle-shim/main/install.sh | sh
+# then:
+dozzle-shim -logs ./logs -glob '*.log' -listen :8080
+# open http://localhost:8080
+```
+
+The install script grabs the right binary for your OS/arch from the latest
+[GitHub Release](https://github.com/lyminhtanh/dozzle-shim/releases) and drops
+it in `~/.local/bin`. The binary is fully self-contained (UI embedded) — no Go,
+Node, or Docker needed. Pin a version with `VERSION=v0.3.0`, or change the
+target dir with `BINDIR=/usr/local/bin`. Windows: download the `.exe` asset from
+the Releases page.
+
+Add Docker container logs too:
+
+```bash
+dozzle-shim -logs ./logs -docker unix:///var/run/docker.sock -listen :8080
+```
+
+### Option B — Docker image
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v "$PWD/logs":/logs:ro \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  --group-add 0 \
+  ghcr.io/lyminhtanh/dozzle-shim -logs /logs -glob '*.log' \
+  -docker unix:///var/run/docker.sock
+# open http://localhost:8080
+```
+
+- `-v .../logs:/logs:ro` — the host log directory you want to watch.
+- `-v /var/run/docker.sock:...` + `-docker ...` — optional, to also show Docker
+  container logs. Drop both if you only want file logs.
+- `--group-add` — the container runs as a non-root user, so it needs the
+  socket's group to read it. On **Docker Desktop (Mac/Windows)** the in-VM
+  socket is root-owned → use `--group-add 0`. On **native Linux** use the host
+  docker group → `--group-add "$(getent group docker | cut -d: -f3)"`.
+
+## Quick start (from source)
 
 The Dozzle UI is **embedded in the binary** (`go:embed`), so there is nothing
 else to build or download — clone and run:
@@ -158,6 +204,9 @@ features need Docker and have no meaning for file logs.
 
 ```
 build.sh                    cross-compile standalone binaries (mac/linux/windows) into dist/
+install.sh                  one-line installer: fetch the right release binary (no clone/Go)
+Dockerfile                  multi-stage build → tiny static image (UI embedded)
+.github/workflows/release.yml  on a v* tag: publish binaries + push the GHCR image
 main.go                     wiring + flag parsing; serves the embedded UI
 internal/model/             wire contracts (file line <-> Dozzle LogEvent) + translation (tested)
 internal/store/             durable normalized history: RAM + JSONL disk cache; Between/Search/Recent (tested)
@@ -169,6 +218,29 @@ internal/web/               SSE helpers, impersonated /api handlers (bootstrap, 
                             index.html template renderer, brotli-aware static assets (tested)
 internal/web/ui/            the embedded Dozzle frontend (go:embed dist)
 ```
+
+## Releasing
+
+Publishing is automated by `.github/workflows/release.yml` and triggered by a
+version tag:
+
+```bash
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+On that tag, CI:
+
+1. runs `./build.sh` and attaches the 5 binaries to a new GitHub Release
+   (so `install.sh` and the Releases page can serve them), and
+2. builds the multi-arch image and pushes it to
+   `ghcr.io/lyminhtanh/dozzle-shim` (tags: full version, `major.minor`, and
+   `latest`).
+
+Nothing is published until you push a tag; day-to-day commits don't release.
+(First-time GHCR note: the pushed package may default to private — make it
+public once in the repo's Packages settings so `docker run ghcr.io/...` works
+without a login.)
 
 ## Updating the embedded UI
 
