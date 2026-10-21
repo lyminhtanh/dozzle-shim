@@ -88,6 +88,7 @@ Flags:
 | `-cache` | `~/.dozzle-shim` | directory for the normalized JSONL history cache |
 | `-history` | `200000` | log lines kept in RAM per container (disk cache keeps all) |
 | `-clear-cache-on-stop` | `true` | delete the on-disk JSONL cache on shutdown (no history persists across runs); set `false` to keep history |
+| `-discord-webhook` | `$DISCORD_WEBHOOK_URL` | enable the error-context alert relay (`POST /api/alert/discord`); empty = endpoint returns 503 |
 | `-ui` | *(embedded)* | dev only: override the embedded UI with a Dozzle `dist` on disk |
 
 ### Adding / removing tracked logs
@@ -218,6 +219,27 @@ live stream showed (same id/ts/level).
 Everything else the UI may probe (image checks, container actions, exec,
 notifications, cloud, multi-host, inspect) is intentionally absent/empty — those
 features need Docker and have no meaning for file logs.
+
+## Error-context alert relay (`-discord-webhook`)
+
+Dozzle can alert on an error log line, but its webhook can only POST that single
+line and cannot attach a file. This shim adds `POST /api/alert/discord`: point a
+Dozzle webhook dispatcher at it, and for each error it reads the Rails request
+id from the line, gathers **every** stored log line sharing that request id, and
+forwards them to Discord as a `multipart/form-data` message with the full
+context attached as `request-<id>.log` — sidestepping Discord's 2000-char limit.
+
+```bash
+dozzle-shim -docker unix:///var/run/docker.sock -listen :8080 \
+  -discord-webhook "$DISCORD_WEBHOOK_URL"
+```
+
+Empty webhook = the endpoint returns 503 and the shim still serves as a log
+viewer. No request id / no stored context → it falls back to posting just the
+triggering line, so an error is never dropped. Guards: 7 MiB file cap, 2000-char
+content cap, and a per-request-id cooldown to respect Discord's rate limit. See
+`.kiro/skills/alert-relay/SKILL.md` for the full Dozzle `notifications.yml`
+wiring.
 
 ## Known limitations
 

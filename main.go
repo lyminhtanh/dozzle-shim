@@ -63,6 +63,7 @@ func main() {
 	cacheDir := flag.String("cache", defaultCacheDir(), "directory for the normalized JSONL log cache")
 	dockerHost := flag.String("docker", "", "also stream logs from a Docker daemon, e.g. unix:///var/run/docker.sock or tcp://host:2375 (empty = disabled)")
 	clearCacheOnStop := flag.Bool("clear-cache-on-stop", true, "delete the on-disk JSONL cache on shutdown (no history persists across runs)")
+	discordWebhook := flag.String("discord-webhook", os.Getenv("DISCORD_WEBHOOK_URL"), "Discord webhook URL; enables POST /api/alert/discord to relay a Dozzle error alert with the full request context attached as a file (defaults to $DISCORD_WEBHOOK_URL)")
 	var execCmds stringSlice
 	flag.Var(&execCmds, "exec", "run a command and stream its stdout+stderr into the UI (repeatable), e.g. -exec 'java -jar app.jar'")
 	var execNames stringSlice
@@ -113,8 +114,12 @@ func main() {
 		go esrc.Run(stop)
 	}
 
-	// Sink: Dozzle UI + impersonated /api, served from the hub.
-	srv := &web.Server{Hub: h, Version: version}
+	// Sink: Dozzle UI + impersonated /api, served from the hub. The optional
+	// Discord webhook enables the error-context alert relay (/api/alert/discord).
+	srv := &web.Server{Hub: h, Version: version, DiscordWebhook: *discordWebhook}
+	if *discordWebhook != "" {
+		log.Printf("alert relay enabled: POST /api/alert/discord -> Discord webhook")
+	}
 	// UI: embedded Dozzle dist by default (self-contained binary); -ui overrides
 	// with an on-disk dist for iterating on the frontend.
 	var uiFS fs.FS = ui.DistFS()

@@ -24,6 +24,14 @@ import (
 type Server struct {
 	Hub     *hub.Hub
 	Version string
+	// DiscordWebhook, when set, enables POST /api/alert/discord to relay a
+	// Dozzle error alert into a Discord message with the full request context
+	// attached as a file. Empty = the endpoint returns 503.
+	DiscordWebhook string
+
+	// alertDedupe throttles repeat alerts for the same request_id; lazily
+	// initialized on first alert.
+	alertDedupe *alertDedup
 }
 
 // Mux builds the HTTP routes. The static UI handler (Dozzle's built assets) is
@@ -39,10 +47,18 @@ func (s *Server) Mux(ui http.Handler) *http.ServeMux {
 	// buffer so the UI can scroll up / jump to time / download.
 	mux.HandleFunc("/api/containers/logs", s.backfill)
 
+	// Alert relay: Dozzle POSTs an error alert here; we enrich it with the full
+	// request context from the store and forward to Discord with a file attachment.
+	mux.HandleFunc("/api/alert/discord", s.alertDiscord)
+
 	// Misc endpoints the UI pings; keep them harmless.
 	mux.HandleFunc("/api/version", s.version)
 	mux.HandleFunc("/api/usage", noContent)
 	mux.HandleFunc("/api/profile", noContent)
+
+	// Alert relay: Dozzle POSTs an error alert here; we enrich it with the full
+	// request context and forward to Discord (503 if no webhook configured).
+	mux.HandleFunc("/api/alert/discord", s.alertDiscord)
 
 	// The histogram URL has variable {host}/{id} segments, so route it in the
 	// catch-all by prefix/suffix match; everything else there serves the UI.
