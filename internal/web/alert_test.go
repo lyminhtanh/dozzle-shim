@@ -198,6 +198,20 @@ func TestAlertNoWebhookReturns503(t *testing.T) {
 	}
 }
 
+// TestMuxNoDuplicateRoutes guards against a duplicate ServeMux registration
+// (Go 1.22 panics on conflicting patterns at mux build time). This is what
+// crash-looped the container when /api/alert/discord was registered twice.
+func TestMuxNoDuplicateRoutes(t *testing.T) {
+	st, _ := store.New(t.TempDir(), 0)
+	s := &Server{Hub: hub.New(st), Version: "test"}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Mux() panicked (duplicate/conflicting route?): %v", r)
+		}
+	}()
+	_ = s.Mux(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+}
+
 func TestResolveContainerIDByName(t *testing.T) {
 	s, _ := newTestServer(t, []string{"line"})
 	if id := s.resolveContainerID("core-api"); id != "abc123containerid" {

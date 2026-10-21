@@ -47,17 +47,14 @@ func (s *Server) Mux(ui http.Handler) *http.ServeMux {
 	// buffer so the UI can scroll up / jump to time / download.
 	mux.HandleFunc("/api/containers/logs", s.backfill)
 
-	// Alert relay: Dozzle POSTs an error alert here; we enrich it with the full
-	// request context from the store and forward to Discord with a file attachment.
-	mux.HandleFunc("/api/alert/discord", s.alertDiscord)
-
 	// Misc endpoints the UI pings; keep them harmless.
 	mux.HandleFunc("/api/version", s.version)
 	mux.HandleFunc("/api/usage", noContent)
 	mux.HandleFunc("/api/profile", noContent)
 
 	// Alert relay: Dozzle POSTs an error alert here; we enrich it with the full
-	// request context and forward to Discord (503 if no webhook configured).
+	// request context from the store and forward to Discord with a file attachment
+	// (503 if no webhook configured).
 	mux.HandleFunc("/api/alert/discord", s.alertDiscord)
 
 	// The histogram URL has variable {host}/{id} segments, so route it in the
